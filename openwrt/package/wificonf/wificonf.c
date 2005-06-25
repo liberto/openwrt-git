@@ -92,12 +92,12 @@ char *wl_var(char *name)
 
 int nvram_enabled(char *name)
 {
-	return (nvram_match(name, "1") || nvram_match(name, "on") || nvram_match(name, "enabled") ? 1 : 0);
+	return (nvram_match(name, "1") || nvram_match(name, "on") || nvram_match(name, "enabled") || nvram_match(name, "true") || nvram_match(name, "yes") ? 1 : 0);
 }
 
 int nvram_disabled(char *name)
 {
-	return (nvram_match(name, "0") || nvram_match(name, "off") || nvram_match(name, "disabled") ? 1 : 0);
+	return (nvram_match(name, "0") || nvram_match(name, "off") || nvram_match(name, "disabled") || nvram_match(name, "false") || nvram_match(name, "no") ? 1 : 0);
 }
 
 
@@ -178,23 +178,41 @@ void setup_bcom(int skfd, char *ifname)
 	bcom_set_val(skfd, ifname, "afterburner_override", &val, sizeof(val));
 	
 	/* Set other options */
-	val = atoi(nvram_safe_get(wl_var("lazywds")));
-	bcom_ioctl(skfd, ifname, WLC_SET_LAZYWDS, &val, sizeof(val));
-	val = atoi(nvram_safe_get(wl_var("frag")));
-	bcom_ioctl(skfd, ifname, WLC_SET_FRAG, &val, sizeof(val));
-	val = atoi(nvram_safe_get(wl_var("dtim")));
-	bcom_ioctl(skfd, ifname, WLC_SET_DTIMPRD, &val, sizeof(val));
-	val = atoi(nvram_safe_get(wl_var("bcn")));
-	bcom_ioctl(skfd, ifname, WLC_SET_BCNPRD, &val, sizeof(val));
-	val = atoi(nvram_safe_get(wl_var("rts")));
-	bcom_ioctl(skfd, ifname, WLC_SET_RTS, &val, sizeof(val));
-	val = atoi(nvram_safe_get(wl_var("antdiv")));
-	bcom_ioctl(skfd, ifname, WLC_SET_ANTDIV, &val, sizeof(val));
-	val = atoi(nvram_safe_get(wl_var("txant")));
-	bcom_ioctl(skfd, ifname, WLC_SET_TXANT, &val, sizeof(val));
+	if (v = nvram_get(wl_var("lazywds"))) {
+		val = atoi(v);
+		bcom_ioctl(skfd, ifname, WLC_SET_LAZYWDS, &val, sizeof(val));
+	}
+	if (v = nvram_get(wl_var("frag"))) {
+		val = atoi(v);
+		bcom_ioctl(skfd, ifname, WLC_SET_FRAG, &val, sizeof(val));
+	}
+	if (v = nvram_get(wl_var("dtim"))) {
+		val = atoi(v);
+		bcom_ioctl(skfd, ifname, WLC_SET_DTIMPRD, &val, sizeof(val));
+	}
+	if (v = nvram_get(wl_var("bcn"))) {
+		val = atoi(v);
+		bcom_ioctl(skfd, ifname, WLC_SET_BCNPRD, &val, sizeof(val));
+	}
+	if (v = nvram_get(wl_var("rts"))) {
+		val = atoi(v);
+		bcom_ioctl(skfd, ifname, WLC_SET_RTS, &val, sizeof(val));
+	}
+	if (v = nvram_get(wl_var("antdiv"))) {
+		val = atoi(v);
+		bcom_ioctl(skfd, ifname, WLC_SET_ANTDIV, &val, sizeof(val));
+	}
+	if (v = nvram_get(wl_var("txant"))) {
+		val = atoi(v);
+		bcom_ioctl(skfd, ifname, WLC_SET_TXANT, &val, sizeof(val));
+	}
+	
+	val = nvram_enabled(wl_var("closed"));
+	bcom_ioctl(skfd, ifname, WLC_SET_CLOSED, &val, sizeof(val));
 
 	val = nvram_enabled(wl_var("ap_isolate"));
 	bcom_set_int(skfd, ifname, "ap_isolate", val);
+
 	val = nvram_enabled(wl_var("frameburst"));
 	bcom_ioctl(skfd, ifname, WLC_SET_FAKEFRAG, &val, sizeof(val));
 
@@ -208,6 +226,7 @@ void setup_bcom(int skfd, char *ifname)
 
 	if ((val != WLC_MACMODE_DISABLED) && (v = nvram_get(wl_var("maclist")))) {
 		char buf[8192];
+		char wbuf[80];
 		struct maclist *mac_list;
 		struct ether_addr *addr;
 		char *next;
@@ -215,9 +234,9 @@ void setup_bcom(int skfd, char *ifname)
 		memset(buf, 0, 8192);
 		mac_list = (struct maclist *) buf;
 		addr = mac_list->ea;
-
-		foreach(v, nvram_safe_get(wl_var("maclist")), next) {
-			if (ether_atoe(v, addr->ether_addr_octet)) {
+		
+		foreach(wbuf, nvram_safe_get(wl_var("maclist")), next) {
+			if (ether_atoe(wbuf, addr->ether_addr_octet)) {
 				mac_list->count++;
 				addr++;
 			}
@@ -334,24 +353,21 @@ void setup_wext(int skfd, char *ifname)
 	if (channel > 0) {
 		wrq.u.freq.flags = IW_FREQ_FIXED;
 		wrq.u.freq.m = channel;
+		IW_SET_EXT_ERR(skfd, ifname, SIOCSIWFREQ, &wrq, "Set Frequency");
 	}
-	IW_SET_EXT_ERR(skfd, ifname, SIOCSIWFREQ, &wrq, "Set Frequency");
 	
 	/* Set operation mode */
 	int ap = 0, infra = 0, wet = 0;
 	
-	ap = (nvram_match(wl_var("mode"), "ap") || nvram_match(wl_var("mode"), "wds"));
-	infra = nvram_enabled(wl_var("infra"));
+	ap = !nvram_match(wl_var("mode"), "sta");
+	infra = !nvram_disabled(wl_var("infra"));
 	wet = nvram_enabled(wl_var("wet"));
 
 	wrq.u.mode = (!infra ? IW_MODE_ADHOC : (ap ? IW_MODE_MASTER : (wet ? IW_MODE_REPEAT : IW_MODE_INFRA)));
 	IW_SET_EXT_ERR(skfd, ifname, SIOCSIWMODE, &wrq, "Set Mode");
 
 	/* Disable radio if wlX_radio is set and not enabled */
-	if (nvram_disabled(wl_var("radio")))
-		wrq.u.txpower.disabled = 1;
-	else 
-		wrq.u.txpower.disabled = 0;
+	wrq.u.txpower.disabled = nvram_disabled(wl_var("radio"));
 
 	wrq.u.txpower.value = -1;
 	wrq.u.txpower.fixed = 1;
@@ -385,7 +401,6 @@ static int setup_interfaces(int skfd, char *ifname, char *args[], int count)
 int main(int argc, char **argv)
 {
 	int skfd;
-
 	if((skfd = iw_sockets_open()) < 0) {
 		perror("socket");
 		exit(-1);
