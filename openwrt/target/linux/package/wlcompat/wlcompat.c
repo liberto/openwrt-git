@@ -176,7 +176,7 @@ static int wlcompat_ioctl_getiwrange(struct net_device *dev,
 	if (wl_ioctl(dev, WLC_GET_FRAG, &range->max_frag, sizeof(int)) < 0)
 		range->max_frag = 2346;
 
-	range->txpower_capa = IW_TXPOW_MWATT;
+	range->txpower_capa = IW_TXPOW_DBM;
 
 	return 0;
 }
@@ -412,17 +412,17 @@ static int wlcompat_ioctl(struct net_device *dev,
 		{
 			int radio;
 
-			if (wl_ioctl(dev, WLC_GET_RADIO, &radio, sizeof(int)) < 0)
-				return -EINVAL;
+			wl_ioctl(dev, WLC_GET_RADIO, &radio, sizeof(int));
 			
 			if (wl_get_val(dev, "qtxpower", &(wrqu->txpower.value), sizeof(int)) < 0)
 				return -EINVAL;
 			
 			wrqu->txpower.value &= ~WL_TXPWR_OVERRIDE;
+			wrqu->txpower.value /= 4;
 				
 			wrqu->txpower.fixed = 0;
 			wrqu->txpower.disabled = radio;
-			wrqu->txpower.flags = IW_TXPOW_MWATT;
+			wrqu->txpower.flags = IW_TXPOW_DBM;
 			break;
 		}
 		case SIOCSIWTXPOW:
@@ -430,19 +430,19 @@ static int wlcompat_ioctl(struct net_device *dev,
 			/* This is weird: WLC_SET_RADIO with 1 as argument disables the radio */
 			int radio = wrqu->txpower.disabled;
 
-			if (wl_ioctl(dev, WLC_SET_RADIO, &radio, sizeof(int)) < 0)
-				return -EINVAL;
+			wl_ioctl(dev, WLC_SET_RADIO, &radio, sizeof(int));
 			
-			if (!wrqu->txpower.disabled) {
+			if (!wrqu->txpower.disabled && (wrqu->txpower.value > 0)) {
 				int value;
 				
 				if (wl_get_val(dev, "qtxpower", &value, sizeof(int)) < 0)
 					return -EINVAL;
 				
 				value &= WL_TXPWR_OVERRIDE;
+				wrqu->txpower.value *= 4;
 				wrqu->txpower.value |= value;
 				
-				if (wrqu->txpower.flags != IW_TXPOW_MWATT)
+				if (wrqu->txpower.flags != IW_TXPOW_DBM)
 					return -EINVAL;
 				
 				if (wrqu->txpower.value > 0)
@@ -459,8 +459,15 @@ static int wlcompat_ioctl(struct net_device *dev,
 			if (index < 0)
 				index = get_primary_key(dev);
 			
-			if (wrqu->data.flags & IW_ENCODE_DISABLED)
+			if (wrqu->data.flags & IW_ENCODE_DISABLED) {
 				wep = 0;
+				if (wl_ioctl(dev, WLC_SET_WSEC, &wep, sizeof(val)) < 0)
+					return -EINVAL;
+				return 0;
+			}
+
+			if (wl_ioctl(dev, WLC_SET_WSEC, &wep, sizeof(val)) < 0)
+				return -EINVAL;
 
 			if (wrqu->data.flags & IW_ENCODE_OPEN)
 				wrestrict = 0;
@@ -479,18 +486,11 @@ static int wlcompat_ioctl(struct net_device *dev,
 			}
 
 			if (index >= 0)
-				if (wl_ioctl(dev, WLC_SET_KEY_PRIMARY, &index, sizeof(index)) < 0)
-					return -EINVAL;
+				wl_ioctl(dev, WLC_SET_KEY_PRIMARY, &index, sizeof(index));
 			
-			if (wl_ioctl(dev, WLC_GET_WSEC, &val, sizeof(val)) < 0)
-				return -EINVAL;
-			val |= wep;
-			if (wl_ioctl(dev, WLC_SET_WSEC, &val, sizeof(val)) < 0)
-				return -EINVAL;
-
 			if (wrestrict >= 0)
-				if (wl_ioctl(dev, WLC_SET_WEP_RESTRICT, &wrestrict, sizeof(wrestrict)) < 0)
-					return -EINVAL;
+				wl_ioctl(dev, WLC_SET_WEP_RESTRICT, &wrestrict, sizeof(wrestrict));
+
 			break;
 		}
 		case SIOCGIWENCODE:

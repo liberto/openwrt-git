@@ -4,7 +4,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=pptp
 PKG_VERSION:=1.6.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_MD5SUM:=9a706327fb9827541d7c86d48ceb9631
 
 PKG_SOURCE_URL:=@SF/pptpclient
@@ -28,8 +28,8 @@ $(PKG_BUILD_DIR)/.built:
 	touch $@
 
 $(IPKG_PPTP):
-	install -d -m0755 $(IDIR_PPTP)/etc/init.d
-	install -m0755 ./files/pptp.init $(IDIR_PPTP)/etc/init.d/S50pptp
+	install -d -m0755 $(IDIR_PPTP)/sbin
+	install -m0755 ./files/ifup.pptp $(IDIR_PPTP)/sbin/ifup.pptp
 	install -d -m0755 $(IDIR_PPTP)/etc/ppp
 	install -m0644 ./files/options.pptp $(IDIR_PPTP)/etc/ppp/
 	install -d -m0755 $(IDIR_PPTP)/usr/sbin

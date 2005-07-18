@@ -4,7 +4,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=ppp
 PKG_VERSION:=2.4.3
-PKG_RELEASE:=4
+PKG_RELEASE:=5
 PKG_MD5SUM:=848f6c3cafeb6074ffeb293c3af79b7c
 
 PKG_SOURCE_URL:=ftp://ftp.samba.org/pub/ppp/
@@ -70,6 +70,7 @@ $(PKG_BUILD_DIR)/.built:
 	$(MAKE) -C $(PKG_BUILD_DIR) \
 		CC=$(TARGET_CC) \
 		COPTS="$(TARGET_CFLAGS)" \
+		HAVE_INET6="1" \
 		DESTDIR="$(PKG_INSTALL_DIR)/usr" \
 		all install
 	touch $@
@@ -87,11 +88,11 @@ $(IPKG_PPP):
 	$(RSTRIP) $(IDIR_PPP)
 	$(IPKG_BUILD) $(IDIR_PPP) $(PACKAGE_DIR)
 	
-$(IDIR_PPP_MOD_PPPOE)/etc/init.d/S50pppoe:
-	install -d -m0755 $(IDIR_PPP_MOD_PPPOE)/etc/init.d
-	install -m0755 ./files/pppoe.init $(IDIR_PPP_MOD_PPPOE)/etc/init.d/S50pppoe
+$(IDIR_PPP_MOD_PPPOE)/sbin/ifup.pppoe:
+	install -d -m0755 $(IDIR_PPP_MOD_PPPOE)/sbin
+	install -m0755 ./files/ifup.pppoe $(IDIR_PPP_MOD_PPPOE)/sbin/
 
-$(IPKG_PPP_MOD_PPPOE): $(IDIR_PPP_MOD_PPPOE)/etc/init.d/S50pppoe
+$(IPKG_PPP_MOD_PPPOE): $(IDIR_PPP_MOD_PPPOE)/sbin/ifup.pppoe
 
 $(IDIR_PPP_MOD_RADIUS)/etc/ppp/radius.conf:
 
