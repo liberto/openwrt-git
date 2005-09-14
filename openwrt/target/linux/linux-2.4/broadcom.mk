@@ -19,14 +19,15 @@ $(eval $(call KMOD_template,LP,lp,\
 	$(MODULES_DIR)/kernel/drivers/parport/parport.o \
 	$(MODULES_DIR)/kernel/drivers/parport/parport_splink.o \
 	$(MODULES_DIR)/kernel/drivers/char/lp.o \
-,CONFIG_PARPORT))
+	$(MODULES_DIR)/kernel/drivers/char/ppdev.o \
+,CONFIG_PARPORT,,50,parport parport_splink lp))
 
 LINUX_BINARY_DRIVER_SITE=http://openwrt.org/downloads/sources
-# proprietary driver, extracted from asus GPL sourcetree GPL_1941.zip
-LINUX_BINARY_WL_DRIVER=kernel-binary-wl-0.3.tar.gz
-LINUX_BINARY_WL_MD5SUM=cc45df670bcfb4e74a709b9d7beba636
-LINUX_ET_DRIVER=kernel-source-et-0.10.tar.gz
-LINUX_ET_MD5SUM=408901f0b3c672ea0f353795391f07f6
+# proprietary driver, extracted from Linksys GPL sourcetree WRT54GS 4.70.6
+LINUX_BINARY_WL_DRIVER=kernel-binary-wl-0.4.tar.gz
+LINUX_BINARY_WL_MD5SUM=0659fa8f1805be6ec03188ef8e1216cc
+LINUX_ET_DRIVER=kernel-source-et-0.11.tar.gz
+LINUX_ET_MD5SUM=bdc23ab59440793e35cab039457f6358
 
 $(DL_DIR)/$(LINUX_BINARY_WL_DRIVER):
 	$(SCRIPT_DIR)/download.pl $(DL_DIR) $(LINUX_BINARY_WL_DRIVER) $(LINUX_BINARY_WL_MD5SUM) $(LINUX_BINARY_DRIVER_SITE)
@@ -37,7 +38,7 @@ $(DL_DIR)/$(LINUX_ET_DRIVER):
 $(LINUX_DIR)/.depend_done: $(LINUX_DIR)/.drivers-unpacked
 $(LINUX_DIR)/.modules_done: $(LINUX_DIR)/.drivers-unpacked
 
-$(LINUX_DIR)/.drivers-unpacked: $(LINUX_DIR)/.unpacked
+$(LINUX_DIR)/.drivers-unpacked: $(LINUX_DIR)/.unpacked $(DL_DIR)/$(LINUX_BINARY_WL_DRIVER) $(DL_DIR)/$(LINUX_ET_DRIVER)
 	-mkdir -p $(BUILD_DIR)
 	zcat $(DL_DIR)/$(LINUX_BINARY_WL_DRIVER) | tar -C $(BUILD_DIR) $(TAR_OPTIONS) -
 	zcat $(DL_DIR)/$(LINUX_ET_DRIVER) | tar -C $(BUILD_DIR) $(TAR_OPTIONS) -

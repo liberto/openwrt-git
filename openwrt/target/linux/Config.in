@@ -7,22 +7,12 @@ config BR2_LINUX_2_4_BRCM
 	bool "Support for Broadcom based routers"
 	default y
 	help
-	  Build firmware images for Broadcom based routers (e.g. Linksys WRT54G(S), Asus WL-500g)
-	  
-	config BR2_TARGET_WRT54G
-		default y
-		depends BR2_LINUX_2_4_BRCM
-		bool "Linksys WRT54G"
-
-	config BR2_TARGET_WRT54GS
-		default y
-		depends BR2_LINUX_2_4_BRCM
-		bool "Linksys WRT54GS"
-	
-	config BR2_TARGET_MOTOROLA
-		default y
-		depends BR2_LINUX_2_4_BRCM
-		bool "Motorola"
+	  Build firmware images for Broadcom based routers
+          (e.g. Linksys WRT54G(S), Asus WL-500g, Motorola WR850G)
+		               
+	  This one builds the generic .trx images, activate one of the
+	  options below for creating device specific files for use 
+	  with TFTP client too. 
 
 comment "Kernel Modules"
 
@@ -239,5 +229,13 @@ config BR2_PACKAGE_KMOD_SCHED
 	default m
 	help
 	  Kernel schedulers for IP traffic
+
+config BR2_PACKAGE_KMOD_VIDEODEV
+	tristate "Video (For Linux) kernel support"
+	default m
+
+config BR2_PACKAGE_KMOD_PWC
+	tristate "Kernel driver for USB Philips Cameras"
+	default m
 
 source "target/linux/package/Config.in"

@@ -4,7 +4,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=nfs-server
 PKG_VERSION:=2.2beta47
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_MD5SUM:=79a29fe9f79b2f3241d4915767b8c511
 
 PKG_SOURCE_URL:=http://ftp.debian.org/debian/pool/main/n/nfs-user-server
@@ -55,7 +55,7 @@ $(IPKG_NFS_SERVER):
 	install -d -m0755 $(IDIR_NFS_SERVER)/etc
 	install -m0644 ./files/nfsd.exports $(IDIR_NFS_SERVER)/etc/exports
 	install -d -m0755 $(IDIR_NFS_SERVER)/etc/init.d
-	install -m0644 ./files/nfsd.init $(IDIR_NFS_SERVER)/etc/init.d/S60nfsd
+	install -m0755 ./files/nfsd.init $(IDIR_NFS_SERVER)/etc/init.d/S60nfsd
 	install -d -m0755 $(IDIR_NFS_SERVER)/usr/sbin
 	install -m0755 $(PKG_BUILD_DIR)/rpc.* $(IDIR_NFS_SERVER)/usr/sbin/
 	$(RSTRIP) $(IDIR_NFS_SERVER)

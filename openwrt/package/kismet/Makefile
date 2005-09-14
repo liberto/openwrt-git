@@ -3,9 +3,9 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=kismet
-PKG_VERSION:=2005-04-R1
+PKG_VERSION:=2005-08-R1
 PKG_RELEASE:=1
-PKG_MD5SUM:=19b4f192eb11a418ed3f6bf65c1226af
+PKG_MD5SUM:=17edb7688e04dd28028d5268a77d0ce7
 
 PKG_SOURCE_URL:=http://www.kismetwireless.net/code
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
@@ -16,6 +16,7 @@ PKG_INSTALL_DIR:=$(PKG_BUILD_DIR)/ipkg-install
 
 include $(TOPDIR)/package/rules.mk
 
+$(eval $(call PKG_template,KISMET,kismet,$(PKG_VERSION)-$(PKG_RELEASE),$(ARCH)))
 $(eval $(call PKG_template,KISMET_CLIENT,kismet-client,$(PKG_VERSION)-$(PKG_RELEASE),$(ARCH)))
 $(eval $(call PKG_template,KISMET_DRONE,kismet-drone,$(PKG_VERSION)-$(PKG_RELEASE),$(ARCH)))
 $(eval $(call PKG_template,KISMET_SERVER,kismet-server,$(PKG_VERSION)-$(PKG_RELEASE),$(ARCH)))
@@ -44,11 +45,13 @@ $(PKG_BUILD_DIR)/.configured:
 		  --localstatedir=/var \
 		  --mandir=/usr/share/man \
 		  --sbindir=/usr/sbin \
-		  --sysconfdir=/etc \
+		  --sysconfdir=/etc/kismet \
 		  $(DISABLE_LARGEFILE) \
 		  $(DISABLE_NLS) \
 		  --enable-syspcap=yes \
+		  --disable-setuid \
 		  --disable-wsp100 \
+		  --disable-gpsmap \
 	);
 	touch $@
 
@@ -59,35 +62,40 @@ $(PKG_BUILD_DIR)/.built:
 		CPPFLAGS="-I$(STAGING_DIR)/include -I$(STAGING_DIR)/usr/include -I$(LINUX_DIR)/include" 
 	touch $@
 
+$(IPKG_KISMET):
+	install -d -m0755 $(IDIR_KISMET)/usr/bin/
+	install -m0755 $(PKG_BUILD_DIR)/scripts/kismet $(IDIR_KISMET)/usr/bin/kismet
+	$(IPKG_BUILD) $(IDIR_KISMET) $(PACKAGE_DIR)
+
 $(IPKG_KISMET_CLIENT):
-	install -d -m0755 $(IDIR_KISMET_CLIENT)/etc
-	install -m0644 ./files/ap_manuf $(IDIR_KISMET_CLIENT)/etc/
-	install -m0644 ./files/client_manuf $(IDIR_KISMET_CLIENT)/etc/
-	install -m0644 ./files/kismet.conf $(IDIR_KISMET_CLIENT)/etc/
-	install -m0644 ./files/kismet_ui.conf $(IDIR_KISMET_CLIENT)/etc/
-	install -d -m0755 $(IDIR_KISMET_CLIENT)/usr/sbin
-	cp -fpR $(PKG_BUILD_DIR)/kismet_client $(IDIR_KISMET_CLIENT)/usr/sbin/
+	install -d -m0755 $(IDIR_KISMET_CLIENT)/etc/kismet/
+	install -m0644 ./files/ap_manuf $(IDIR_KISMET_CLIENT)/etc/kismet/
+	install -m0644 ./files/client_manuf $(IDIR_KISMET_CLIENT)/etc/kismet/
+	install -m0644 ./files/kismet.conf $(IDIR_KISMET_CLIENT)/etc/kismet/
+	install -m0644 ./files/kismet_ui.conf $(IDIR_KISMET_CLIENT)/etc/kismet/
+	install -d -m0755 $(IDIR_KISMET_CLIENT)/usr/bin
+	cp -fpR $(PKG_BUILD_DIR)/kismet_client $(IDIR_KISMET_CLIENT)/usr/bin/
 	$(RSTRIP) $(IDIR_KISMET_CLIENT)
 	$(IPKG_BUILD) $(IDIR_KISMET_CLIENT) $(PACKAGE_DIR)
 
 $(IPKG_KISMET_DRONE):
-	install -d -m0755 $(IDIR_KISMET_DRONE)/etc
-	install -m0644 ./files/kismet_drone.conf $(IDIR_KISMET_DRONE)/etc/
-	install -d -m0755 $(IDIR_KISMET_DRONE)/usr/sbin
-	cp -fpR $(PKG_BUILD_DIR)/kismet_drone $(IDIR_KISMET_DRONE)/usr/sbin/
+	install -d -m0755 $(IDIR_KISMET_DRONE)/etc/kismet/
+	install -m0644 ./files/kismet_drone.conf $(IDIR_KISMET_DRONE)/etc/kismet/
+	install -d -m0755 $(IDIR_KISMET_DRONE)/usr/bin
+	cp -fpR $(PKG_BUILD_DIR)/kismet_drone $(IDIR_KISMET_DRONE)/usr/bin/
 	$(RSTRIP) $(IDIR_KISMET_DRONE)
 	$(IPKG_BUILD) $(IDIR_KISMET_DRONE) $(PACKAGE_DIR)
 
 $(IPKG_KISMET_SERVER):
-	install -d -m0755 $(IDIR_KISMET_SERVER)/etc
-	install -m0644 ./files/ap_manuf $(IDIR_KISMET_SERVER)/etc/
-	install -m0644 ./files/client_manuf $(IDIR_KISMET_SERVER)/etc/
-	install -m0644 ./files/kismet.conf $(IDIR_KISMET_SERVER)/etc/
-	mkdir -p $(IDIR_KISMET_SERVER)/usr/sbin
-	cp -fpR  $(PKG_BUILD_DIR)/kismet_server $(IDIR_KISMET_SERVER)/usr/sbin/
+	install -d -m0755 $(IDIR_KISMET_SERVER)/etc/kismet/
+	install -m0644 ./files/ap_manuf $(IDIR_KISMET_SERVER)/etc/kismet/
+	install -m0644 ./files/client_manuf $(IDIR_KISMET_SERVER)/etc/kismet/
+	install -m0644 ./files/kismet.conf $(IDIR_KISMET_SERVER)/etc/kismet/
+	mkdir -p $(IDIR_KISMET_SERVER)/usr/bin
+	cp -fpR  $(PKG_BUILD_DIR)/kismet_server $(IDIR_KISMET_SERVER)/usr/bin/
 	$(RSTRIP) $(IDIR_KISMET_SERVER)
 	$(IPKG_BUILD) $(IDIR_KISMET_SERVER) $(PACKAGE_DIR)
 
 mostlyclean:
-	$(MAKE) -C $(PKG_BUILD_DIR) clean
+#	$(MAKE) -C $(PKG_BUILD_DIR) clean
 	rm -f $(PKG_BUILD_DIR)/.built

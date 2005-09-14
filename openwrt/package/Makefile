@@ -2,7 +2,7 @@
 include $(TOPDIR)/rules.mk
 
 package-:=tcp_wrappers
-package-y:=openwrt
+package-y:=nvram
 package-$(BR2_PACKAGE_AICCU) += aiccu
 package-$(BR2_PACKAGE_ARPTABLES) += arptables
 package-$(BR2_PACKAGE_ARPWATCH) += arpwatch
@@ -56,9 +56,11 @@ package-$(BR2_PACKAGE_LUA) += lua
 package-$(BR2_PACKAGE_LZO) += lzo
 package-$(BR2_PACKAGE_MARADNS) += maradns
 package-$(BR2_PACKAGE_MATRIXSSL) += matrixssl
+package-$(BR2_PACKAGE_MADWIFI_TOOLS) += madwifi-tools
 package-$(BR2_PACKAGE_MICROCOM) += microcom
 package-$(BR2_PACKAGE_MICROPERL) += microperl
 package-$(BR2_PACKAGE_MONIT) += monit
+package-$(BR2_PACKAGE_MTD) += mtd
 package-$(BR2_PACKAGE_MYSQL) += mysql
 package-$(BR2_PACKAGE_NCURSES) += ncurses
 package-$(BR2_PACKAGE_NDISC) += ndisc
@@ -120,17 +122,21 @@ package-$(BR2_PACKAGE_WPUT) += wput
 package-$(BR2_PACKAGE_XINETD) += xinetd
 package-$(BR2_PACKAGE_ZLIB) += zlib
 
-DEV_LIBS:=tcp_wrappers glib ncurses openssl pcre popt zlib libnet libpcap mysql postgresql iptables matrixssl lzo gmp fuse portmap libelf uclibc++ speex libpng libgd wireless-tools
+DEV_LIBS:=tcp_wrappers glib ncurses openssl pcre popt zlib libnet libpcap mysql postgresql iptables matrixssl lzo gmp fuse portmap libelf uclibc++ speex libpng libgd wireless-tools nvram
 DEV_LIBS_COMPILE:=$(patsubst %,%-compile,$(DEV_LIBS))
 SDK_DEFAULT_PACKAGES:=busybox dnsmasq iptables wireless-tools dropbear bridge ipkg ppp
 SDK_DEFAULT_COMPILE:=$(patsubst %,%-compile,$(SDK_DEFAULT_PACKAGES))
+COMPILE_PACKAGES:=$(patsubst %,%-compile,$(package-y) $(package-m))
+INSTALL_PACKAGES:=$(patsubst %,%-install,$(package-y))
 
-all: compile install
+all: compile
 clean: $(patsubst %,%-clean,$(package-) $(package-y) $(package-m))
-compile: $(patsubst %,%-compile,$(package-y) $(package-m))
-install: $(patsubst %,%-install,$(package-y))
+compile: $(COMPILE_PACKAGES)
+install: base-files-install $(INSTALL_PACKAGES)
 
-wificonf-compile: openwrt-compile wireless-tools-compile
+$(COMPILE_PACKAGES): base-files-compile
+$(INSTALL_PACKAGES): base-files-install
+
 arpwatch-compile: libpcap-compile
 cyrus-sasl-compile: openssl-compile
 dropbear-compile: zlib-compile
@@ -155,6 +161,7 @@ openswan-compile: gmp-compile
 osiris-compile: openssl-compile
 portmap-compile: tcp_wrappers-compile
 postgresql-compile: zlib-compile
+quagga-compile: readline-compile ncurses-compile
 rsync-compile: popt-compile
 screen-compile: ncurses-compile
 siproxd-compile: libosip2-compile
@@ -162,11 +169,13 @@ sipsak-compile: openssl-compile
 sqlite-compile: ncurses-compile readline-compile
 tcpdump-compile: libpcap-compile
 tinc-compile: zlib-compile openssl-compile lzo-compile
-vtun-compile: zlib-compile openssl-compile lzo-compile
 tor-compile: libevent-compile openssl-compile zlib-compile
+usbutils-compile: libusb-compile
+vtun-compile: zlib-compile openssl-compile lzo-compile
+wificonf-compile: wireless-tools-compile nvram-compile
 wpa_supplicant-compile: openssl-compile
 
-asterisk-compile: openssl-compile
+asterisk-compile: ncurses-compile openssl-compile
 ifneq ($(BR2_PACKAGE_ASTERISK_CODEC_SPEEX),)
 asterisk-compile: speex-compile
 endif
@@ -220,9 +229,12 @@ ifneq ($(BR2_PACKAGE_ULOGD_PGSQL),)
 ulogd-compile: postgresql-compile
 endif
 
-sdk-compile: $(DEV_LIBS_COMPILE) $(SDK_DEFAULT_COMPILE) openwrt-install
+sdk-compile: $(DEV_LIBS_COMPILE) $(SDK_DEFAULT_COMPILE)
 
-%-prepare:
+$(STAMP_DIR):
+	mkdir -p $@
+
+%-prepare: $(STAMP_DIR)
 	@[ -f $(STAMP_DIR)/.$@ ] || $(MAKE) -C $(patsubst %-prepare,%,$@) prepare
 	@touch $(STAMP_DIR)/.$@
 
@@ -231,8 +243,11 @@ sdk-compile: $(DEV_LIBS_COMPILE) $(SDK_DEFAULT_COMPILE) openwrt-install
 	@touch $(STAMP_DIR)/.$@
 
 %-install: %-compile
-	@[ -f $(STAMP_DIR)/.$@ ] || $(MAKE) -C $(patsubst %-install,%,$@) install
-	@touch $(STAMP_DIR)/.$@
+	@$(MAKE) -C $(patsubst %-install,%,$@) \
+		TARGET_DIR="$(TARGET_DIR)" \
+		IPKG_CONF="$(IPKG_CONF)" \
+		BOARD="$(BOARD)" \
+		install
 
 %-rebuild: 
 	@rm -f $(STAMP_DIR)/.$(patsubst %-rebuild,%,$@)-*

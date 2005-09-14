@@ -2,7 +2,7 @@
  * wlcompat.c
  *
  * Copyright (C) 2005 Mike Baker,
- *                    Felix Fietkau <nbd@vd-s.ath.cx>
+ *                    Felix Fietkau <openwrt@nbd.name>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -31,9 +31,10 @@
 
 #include <net/iw_handler.h>
 #include <wlioctl.h>
-#include <wlcompat.h>
 
 static struct net_device *dev;
+static unsigned short bss_force;
+static struct iw_statistics wstats;
 char buf[WLC_IOCTL_MAXLEN];
 
 /* The frequency of each channel in MHz */
@@ -167,6 +168,10 @@ static int wlcompat_ioctl_getiwrange(struct net_device *dev,
 	range->min_pmt = 0;
 	range->max_pmt = 65535 * 1000;
 
+	range->max_qual.qual = 0;
+	range->max_qual.level = 100;
+	range->max_qual.noise = 100;
+	
 	range->min_rts = 0;
 	if (wl_ioctl(dev, WLC_GET_RTS, &range->max_rts, sizeof(int)) < 0)
 		range->max_rts = 2347;
@@ -176,7 +181,7 @@ static int wlcompat_ioctl_getiwrange(struct net_device *dev,
 	if (wl_ioctl(dev, WLC_GET_FRAG, &range->max_frag, sizeof(int)) < 0)
 		range->max_frag = 2346;
 
-	range->txpower_capa = IW_TXPOW_MWATT;
+	range->txpower_capa = IW_TXPOW_DBM;
 
 	return 0;
 }
@@ -216,6 +221,31 @@ static int wlcompat_set_scan(struct net_device *dev,
 }
 
 
+struct iw_statistics *wlcompat_get_wireless_stats(struct net_device *dev)
+{
+	wl_bss_info_t *bss_info = (wl_bss_info_t *) buf;
+	get_pktcnt_t pkt;
+	int rssi, noise;
+	
+	memset(&wstats, 0, sizeof(wstats));
+	memset(&pkt, 0, sizeof(pkt));
+	memset(buf, 0, sizeof(buf));
+	bss_info->version = 0x2000;
+	wl_ioctl(dev, WLC_GET_BSS_INFO, bss_info, WLC_IOCTL_MAXLEN);
+	wl_ioctl(dev, WLC_GET_PKTCNTS, &pkt, sizeof(pkt));
+
+	// somehow the structure doesn't fit here
+	noise = buf[0x50];
+	rssi = buf[0x52];
+
+	wstats.qual.level = rssi;
+	wstats.qual.noise = -100 + noise;
+	wstats.discard.misc = pkt.rx_bad_pkt;
+	wstats.discard.retries = pkt.tx_bad_pkt;
+
+	return &wstats;
+}
+
 static int wlcompat_get_scan(struct net_device *dev,
 			 struct iw_request_info *info,
 			 union iwreq_data *wrqu,
@@ -229,7 +259,10 @@ static int wlcompat_get_scan(struct net_device *dev,
 	char *end_buf = extra + IW_SCAN_MAX_DATA;
 	struct iw_event iwe;
 	int i, j;
-
+	int rssi, noise;
+	
+	results->buflen = WLC_IOCTL_MAXLEN - sizeof(wl_scan_results_t);
+	
 	if (wl_ioctl(dev, WLC_SCAN_RESULTS, buf, WLC_IOCTL_MAXLEN) < 0)
 		return -EAGAIN;
 	
@@ -259,9 +292,9 @@ static int wlcompat_get_scan(struct net_device *dev,
 
 		/* add quality statistics */
 		iwe.cmd = IWEVQUAL;
+		iwe.u.qual.qual = 0;
 		iwe.u.qual.level = bss_info->RSSI;
 		iwe.u.qual.noise = bss_info->phy_noise;
-		iwe.u.qual.qual = 0;
 		current_ev = iwe_stream_add_event(current_ev, end_buf, &iwe, IW_EV_QUAL_LEN);
 	
 		/* send rate information */
@@ -341,20 +374,55 @@ static int wlcompat_ioctl(struct net_device *dev,
 		case SIOCSIWAP:
 		{
 			int ap = 0;
-			
+			int infra = 0;
+			rw_reg_t reg;
+
+			memset(&reg, 0, sizeof(reg));
+
 			if (wrqu->ap_addr.sa_family != ARPHRD_ETHER)
 				return -EINVAL;
 
 			if (wl_ioctl(dev, WLC_GET_AP, &ap, sizeof(ap)) < 0)
 				return -EINVAL;
-			
-			if (wl_ioctl(dev, (ap ? WLC_SET_BSSID : WLC_REASSOC), wrqu->ap_addr.sa_data, 6) < 0)
+
+			if (wl_ioctl(dev, WLC_GET_INFRA, &infra, sizeof(infra)) < 0)
+				return -EINVAL;
+
+			if (!infra) {
+				wl_ioctl(dev, WLC_SET_BSSID, wrqu->ap_addr.sa_data, 6);
+
+				reg.size = 4;
+				reg.byteoff = 0x184;
+				reg.val = bss_force << 16 | bss_force;
+				wl_ioctl(dev, WLC_W_REG, &reg, sizeof(reg));
+				
+				reg.byteoff = 0x180;
+				wl_ioctl(dev, WLC_R_REG, &reg, sizeof(reg));
+				reg.val = bss_force << 16;
+				wl_ioctl(dev, WLC_W_REG, &reg, sizeof(reg));
+			}
+
+			if (wl_ioctl(dev, ((ap || !infra) ? WLC_SET_BSSID : WLC_REASSOC), wrqu->ap_addr.sa_data, 6) < 0)
 				return -EINVAL;
 
 			break;
 		}
 		case SIOCGIWAP:
 		{
+#ifdef DEBUG
+			rw_reg_t reg;
+			memset(&reg, 0, sizeof(reg));
+
+			reg.size = 4;
+			reg.byteoff = 0x184;
+			wl_ioctl(dev, WLC_R_REG, &reg, sizeof(reg));
+			printk("bss time = 0x%08x", reg.val);
+			
+			reg.byteoff = 0x180;
+			wl_ioctl(dev, WLC_R_REG, &reg, sizeof(reg));
+			printk("%08x\n", reg.val);
+#endif
+			
 			wrqu->ap_addr.sa_family = ARPHRD_ETHER;
 			if (wl_ioctl(dev,WLC_GET_BSSID,wrqu->ap_addr.sa_data,6) < 0)
 				return -EINVAL;
@@ -412,17 +480,17 @@ static int wlcompat_ioctl(struct net_device *dev,
 		{
 			int radio;
 
-			if (wl_ioctl(dev, WLC_GET_RADIO, &radio, sizeof(int)) < 0)
-				return -EINVAL;
+			wl_ioctl(dev, WLC_GET_RADIO, &radio, sizeof(int));
 			
 			if (wl_get_val(dev, "qtxpower", &(wrqu->txpower.value), sizeof(int)) < 0)
 				return -EINVAL;
 			
 			wrqu->txpower.value &= ~WL_TXPWR_OVERRIDE;
+			wrqu->txpower.value /= 4;
 				
 			wrqu->txpower.fixed = 0;
 			wrqu->txpower.disabled = radio;
-			wrqu->txpower.flags = IW_TXPOW_MWATT;
+			wrqu->txpower.flags = IW_TXPOW_DBM;
 			break;
 		}
 		case SIOCSIWTXPOW:
@@ -430,19 +498,19 @@ static int wlcompat_ioctl(struct net_device *dev,
 			/* This is weird: WLC_SET_RADIO with 1 as argument disables the radio */
 			int radio = wrqu->txpower.disabled;
 
-			if (wl_ioctl(dev, WLC_SET_RADIO, &radio, sizeof(int)) < 0)
-				return -EINVAL;
+			wl_ioctl(dev, WLC_SET_RADIO, &radio, sizeof(int));
 			
-			if (!wrqu->txpower.disabled) {
+			if (!wrqu->txpower.disabled && (wrqu->txpower.value > 0)) {
 				int value;
 				
 				if (wl_get_val(dev, "qtxpower", &value, sizeof(int)) < 0)
 					return -EINVAL;
 				
 				value &= WL_TXPWR_OVERRIDE;
+				wrqu->txpower.value *= 4;
 				wrqu->txpower.value |= value;
 				
-				if (wrqu->txpower.flags != IW_TXPOW_MWATT)
+				if (wrqu->txpower.flags != IW_TXPOW_DBM)
 					return -EINVAL;
 				
 				if (wrqu->txpower.value > 0)
@@ -459,8 +527,15 @@ static int wlcompat_ioctl(struct net_device *dev,
 			if (index < 0)
 				index = get_primary_key(dev);
 			
-			if (wrqu->data.flags & IW_ENCODE_DISABLED)
+			if (wrqu->data.flags & IW_ENCODE_DISABLED) {
 				wep = 0;
+				if (wl_ioctl(dev, WLC_SET_WSEC, &wep, sizeof(val)) < 0)
+					return -EINVAL;
+				return 0;
+			}
+
+			if (wl_ioctl(dev, WLC_SET_WSEC, &wep, sizeof(val)) < 0)
+				return -EINVAL;
 
 			if (wrqu->data.flags & IW_ENCODE_OPEN)
 				wrestrict = 0;
@@ -479,18 +554,11 @@ static int wlcompat_ioctl(struct net_device *dev,
 			}
 
 			if (index >= 0)
-				if (wl_ioctl(dev, WLC_SET_KEY_PRIMARY, &index, sizeof(index)) < 0)
-					return -EINVAL;
+				wl_ioctl(dev, WLC_SET_KEY_PRIMARY, &index, sizeof(index));
 			
-			if (wl_ioctl(dev, WLC_GET_WSEC, &val, sizeof(val)) < 0)
-				return -EINVAL;
-			val |= wep;
-			if (wl_ioctl(dev, WLC_SET_WSEC, &val, sizeof(val)) < 0)
-				return -EINVAL;
-
 			if (wrestrict >= 0)
-				if (wl_ioctl(dev, WLC_SET_WEP_RESTRICT, &wrestrict, sizeof(wrestrict)) < 0)
-					return -EINVAL;
+				wl_ioctl(dev, WLC_SET_WEP_RESTRICT, &wrestrict, sizeof(wrestrict));
+
 			break;
 		}
 		case SIOCGIWENCODE:
@@ -661,6 +729,19 @@ static const iw_handler	 wlcompat_handler[] = {
 	wlcompat_ioctl,		/* SIOCGIWENCODE */
 };
 
+
+#define WLCOMPAT_SET_MONITOR		SIOCIWFIRSTPRIV + 0
+#define WLCOMPAT_GET_MONITOR		SIOCIWFIRSTPRIV + 1
+#define WLCOMPAT_SET_TXPWR_LIMIT	SIOCIWFIRSTPRIV + 2
+#define WLCOMPAT_GET_TXPWR_LIMIT	SIOCIWFIRSTPRIV + 3
+#define WLCOMPAT_SET_ANTDIV		SIOCIWFIRSTPRIV + 4
+#define WLCOMPAT_GET_ANTDIV		SIOCIWFIRSTPRIV + 5
+#define WLCOMPAT_SET_TXANT		SIOCIWFIRSTPRIV + 6
+#define WLCOMPAT_GET_TXANT		SIOCIWFIRSTPRIV + 7
+#define WLCOMPAT_SET_BSS_FORCE		SIOCIWFIRSTPRIV + 8
+#define WLCOMPAT_GET_BSS_FORCE		SIOCIWFIRSTPRIV + 9
+
+
 static int wlcompat_private_ioctl(struct net_device *dev,
 			 struct iw_request_info *info,
 			 union iwreq_data *wrqu,
@@ -738,6 +819,16 @@ static int wlcompat_private_ioctl(struct net_device *dev,
 
 			break;
 		}
+		case WLCOMPAT_SET_BSS_FORCE:
+		{
+			bss_force = (unsigned short) *value;
+			break;
+		}
+		case WLCOMPAT_GET_BSS_FORCE:
+		{
+			*extra = (int) bss_force;
+			break;
+		}
 		default:
 		{
 			return -EINVAL;
@@ -788,6 +879,16 @@ static const struct iw_priv_args wlcompat_private_args[] =
 		0,
 		IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
 		"get_txant"
+	},
+	{	WLCOMPAT_SET_BSS_FORCE, 
+		IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+		0,
+		"set_bss_force"
+	},
+	{	WLCOMPAT_GET_BSS_FORCE, 
+		0,
+		IW_PRIV_TYPE_INT | IW_PRIV_SIZE_FIXED | 1,
+		"get_bss_force"
 	},
 };
 
@@ -861,6 +962,7 @@ static int __init wlcompat_init()
 {
 	int found = 0, i;
 	char *devname = "eth0";
+	bss_force = 0;
 	
 	while (!found && (dev = dev_get_by_name(devname))) {
 		if ((dev->wireless_handlers == NULL) && ((wl_ioctl(dev, WLC_GET_MAGIC, &i, sizeof(i)) == 0) && i == WLC_IOCTL_MAGIC))
@@ -877,6 +979,7 @@ static int __init wlcompat_init()
 	old_ioctl = dev->do_ioctl;
 	dev->do_ioctl = new_ioctl;
 	dev->wireless_handlers = (struct iw_handler_def *)&wlcompat_handler_def;
+	dev->get_wireless_stats = wlcompat_get_wireless_stats;
 #ifdef DEBUG
 	printk("broadcom driver private data: 0x%08x\n", dev->priv);
 #endif
@@ -885,6 +988,7 @@ static int __init wlcompat_init()
 
 static void __exit wlcompat_exit()
 {
+	dev->get_wireless_stats = NULL;
 	dev->wireless_handlers = NULL;
 	dev->do_ioctl = old_ioctl;
 	return;

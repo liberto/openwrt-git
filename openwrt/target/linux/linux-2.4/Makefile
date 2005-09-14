@@ -13,11 +13,6 @@
 include $(TOPDIR)/rules.mk
 include ../rules.mk
 
-# for testing
-ifeq ($(BOARD),)
-BOARD:=brcm
-endif
-
 LINUX_VERSION:=2.4.30
 MODULES_SUBDIR:=lib/modules/$(LINUX_VERSION)
 LINUX_KCONFIG:=./config/$(BOARD)
@@ -38,10 +33,18 @@ TARGET_MODULES_DIR := $(TARGET_DIR)/lib/modules/$(LINUX_VERSION)
 IPKG_KERNEL:=IPKG_TMP=$(BUILD_DIR)/tmp IPKG_INSTROOT=$(LINUX_TARGET_DIR) IPKG_CONF_DIR=$(LINUX_BUILD_DIR) $(SCRIPT_DIR)/ipkg -force-defaults -force-depends
 
 PKG_BUILD_DIR := $(LINUX_BUILD_DIR)/linux-modules
-PKG_RELEASE := 1
+PKG_RELEASE := 2
 
 KERNEL_IPKG:=$(LINUX_BUILD_DIR)/kernel_$(LINUX_VERSION)-$(BOARD)-$(PKG_RELEASE)_$(ARCH).ipk
 KERNEL_IDIR:=$(LINUX_BUILD_DIR)/kernel-ipkg
+
+KPKG_MAKEOPTS:=	IPKG="$(IPKG_KERNEL)" \
+		BOARD="$(BOARD)" \
+		TARGET_DIR="$(LINUX_TARGET_DIR)" \
+		BUILD_DIR="$(LINUX_BUILD_DIR)" \
+		KERNEL_DIR="$(LINUX_SOURCE_DIR)" \
+		LINUX_VERSION="$(LINUX_VERSION)" \
+		KERNEL_RELEASE="$(PKG_RELEASE)"
 
 include $(LINUX_KCONFIG)
 
@@ -69,55 +72,58 @@ $(eval $(call KMOD_template,IPTABLES_V6,ip6tables,\
 ,CONFIG_IP6_NF_IPTABLES,kmod-ipv6))
 $(eval $(call KMOD_template,IPV6,ipv6,\
 	$(MODULES_DIR)/kernel/net/ipv6/ipv6.o \
-,CONFIG_IPV6))
+,CONFIG_IPV6,,20,ipv6))
 $(eval $(call KMOD_template,CIFS,cifs,\
 	$(MODULES_DIR)/kernel/fs/cifs/cifs.o \
-,CONFIG_CIFS))
+,CONFIG_CIFS,,30,cifs))
 $(eval $(call KMOD_template,NFS,nfs,\
 	$(MODULES_DIR)/kernel/fs/lockd/*.o \
 	$(MODULES_DIR)/kernel/fs/nfs/*.o \
 	$(MODULES_DIR)/kernel/net/sunrpc/*.o \
-,CONFIG_NFS_FS))
+,CONFIG_NFS_FS,,30,sunrpc lockd nfs))
 $(eval $(call KMOD_template,USB,usb-core,\
 	$(MODULES_DIR)/kernel/drivers/usb/usbcore.o \
-,CONFIG_USB))
+,CONFIG_USB,,50,usbcore))
 $(eval $(call KMOD_template,USB_UHCI,usb-uhci,\
 	$(MODULES_DIR)/kernel/drivers/usb/host/uhci.o \
-,CONFIG_USB_UHCI_ALT,kmod-usb-core))
+,CONFIG_USB_UHCI_ALT,kmod-usb-core,60,uhci))
 $(eval $(call KMOD_template,USB_OHCI,usb-ohci,\
 	$(MODULES_DIR)/kernel/drivers/usb/host/usb-ohci.o \
-,CONFIG_USB_OHCI,kmod-usb-core))
+,CONFIG_USB_OHCI,kmod-usb-core,60,usb-ohci))
 $(eval $(call KMOD_template,USB2,usb2,\
 	$(MODULES_DIR)/kernel/drivers/usb/host/ehci-hcd.o \
-,CONFIG_USB_EHCI_HCD,kmod-usb-core))
+,CONFIG_USB_EHCI_HCD,kmod-usb-core,60,ehci-hcd))
 $(eval $(call KMOD_template,USB_STORAGE,usb-storage,\
 	$(MODULES_DIR)/kernel/drivers/scsi/*.o \
 	$(MODULES_DIR)/kernel/drivers/usb/storage/*.o \
-,CONFIG_USB_STORAGE))
+,CONFIG_USB_STORAGE,kmod-usb-core,60,scsi_mod sd_mod usb-storage))
 $(eval $(call KMOD_template,USB_PRINTER,usb-printer,\
 	$(MODULES_DIR)/kernel/drivers/usb/printer.o \
-,CONFIG_USB_PRINTER))
+,CONFIG_USB_PRINTER,kmod-usb-core,60,printer))
 $(eval $(call KMOD_template,IDE,ide,\
 	$(MODULES_DIR)/kernel/drivers/ide/*.o \
 	$(MODULES_DIR)/kernel/drivers/ide/*/*.o \
 ,CONFIG_IDE))
+$(eval $(call KMOD_template,LOOP,loop,\
+    $(MODULES_DIR)/kernel/drivers/block/loop.o \
+,CONFIG_BLK_DEV_LOOP,,20,loop))
 $(eval $(call KMOD_template,EXT2,ext2,\
 	$(MODULES_DIR)/kernel/fs/ext2/*.o \
-,CONFIG_EXT2_FS))
+,CONFIG_EXT2_FS,,30,ext2))
 $(eval $(call KMOD_template,EXT3,ext3,\
 	$(MODULES_DIR)/kernel/fs/ext3/*.o \
 	$(MODULES_DIR)/kernel/fs/jbd/*.o \
-,CONFIG_EXT3_FS))
+,CONFIG_EXT3_FS,,30,jbd ext3))
 $(eval $(call KMOD_template,XFS,xfs,\
 	$(MODULES_DIR)/kernel/fs/xfs/*.o \
-,CONFIG_XFS_FS))
+,CONFIG_XFS_FS,,30,xfs))
 $(eval $(call KMOD_template,HFSPLUS,hfsplus,\
 	$(MODULES_DIR)/kernel/fs/hfsplus/*.o \
-,CONFIG_HFSPLUS_FS))
+,CONFIG_HFSPLUS_FS,,30,hfsplus))
 $(eval $(call KMOD_template,VFAT,vfat,\
 	$(MODULES_DIR)/kernel/fs/vfat/vfat.o \
 	$(MODULES_DIR)/kernel/fs/fat/fat.o \
-,CONFIG_VFAT_FS))
+,CONFIG_VFAT_FS,,30,fat vfat))
 $(eval $(call KMOD_template,CRYPTO,crypto,\
 	$(MODULES_DIR)/kernel/crypto/*.o \
 ))
@@ -135,12 +141,18 @@ $(eval $(call KMOD_template,PPPOE,pppoe,\
 ,CONFIG_PPPOE))
 $(eval $(call KMOD_template,TUN,tun,\
 	$(MODULES_DIR)/kernel/drivers/net/tun.o \
-,CONFIG_TUN))
+,CONFIG_TUN,,20,tun))
 $(eval $(call KMOD_template,GRE,gre,\
 	$(MODULES_DIR)/kernel/net/ipv4/ip_gre.o \
 ,CONFIG_NET_IPGRE))
 $(eval $(call KMOD_template,SCHED,sched,\
 	$(MODULES_DIR)/kernel/net/sched/*.o \
+))
+$(eval $(call KMOD_template,VIDEODEV,videodev,\
+	$(MODULES_DIR)/kernel/drivers/media/video/videodev.o \
+))
+$(eval $(call KMOD_template,PWC,pwc,\
+	$(MODULES_DIR)/kernel/drivers/usb/pwc.o \
 ))
 
 $(TARGETS): $(PACKAGE_DIR)
@@ -148,7 +160,7 @@ $(TARGETS): $(PACKAGE_DIR)
 $(PACKAGE_DIR):
 	mkdir -p $(PACKAGE_DIR)
 
-$(LINUX_DIR)/.unpacked: $(DL_DIR)/$(LINUX_SOURCE) $(DL_DIR)/$(LINUX_BINARY_WL_DRIVER) $(DL_DIR)/$(LINUX_ET_DRIVER)
+$(LINUX_DIR)/.unpacked: $(DL_DIR)/$(LINUX_SOURCE)
 	-mkdir -p $(LINUX_BUILD_DIR)
 	bzcat $(DL_DIR)/$(LINUX_SOURCE) | tar -C $(LINUX_BUILD_DIR) $(TAR_OPTIONS) -
 	rm -f $(LINUX_DIR)
@@ -156,15 +168,15 @@ $(LINUX_DIR)/.unpacked: $(DL_DIR)/$(LINUX_SOURCE) $(DL_DIR)/$(LINUX_BINARY_WL_DR
 	touch $(LINUX_DIR)/.unpacked
 
 $(LINUX_DIR)/.patched: $(LINUX_DIR)/.unpacked
-	[ -d ./patches/$(BOARD) ] && $(PATCH) $(LINUX_DIR) ./patches/$(BOARD)
 	$(PATCH) $(LINUX_DIR) ./patches/generic
+	[ -d ./patches/$(BOARD) ] && $(PATCH) $(LINUX_DIR) ./patches/$(BOARD)
 	touch $(LINUX_DIR)/.patched
 
 $(LINUX_DIR)/.configured: $(LINUX_DIR)/.patched
 	-cp $(LINUX_KCONFIG) $(LINUX_DIR)/.config
 	$(SED) "s,^CROSS_COMPILE.*,CROSS_COMPILE=$(KERNEL_CROSS),g;" \
 	  $(LINUX_DIR)/Makefile  \
-	  $(LINUX_DIR)/arch/mips/Makefile
+	  $(LINUX_DIR)/arch/*/Makefile
 	$(SED) "s,\-mcpu=,\-mtune=,g;" $(LINUX_DIR)/arch/mips/Makefile
 	$(MAKE) -C $(LINUX_DIR) ARCH=$(LINUX_KARCH) oldconfig include/linux/version.h
 	touch $(LINUX_DIR)/.configured
@@ -191,6 +203,15 @@ $(STAGING_DIR)/include/linux/version.h: $(LINUX_DIR)/.configured
 	tar -ch -C $(LINUX_DIR)/include -f - linux | tar -xf - -C $(STAGING_DIR)/include/
 	tar -ch -C $(LINUX_DIR)/include -f - asm | tar -xf - -C $(STAGING_DIR)/include/
 
+$(STAMP_DIR)/.linux-compile: $(LINUX_DIR)/.modules_done
+	@mkdir -p $(STAMP_DIR)
+	@$(MAKE) $(TARGETS)
+	ln -sf $(LINUX_BUILD_DIR)/linux-$(LINUX_VERSION) $(LINUX_DIR)
+	$(MAKE) -C $(TOPDIR)/target/linux/package \
+		$(KPKG_MAKEOPTS) \
+		compile
+	touch $@
+
 $(TARGET_MODULES_DIR): 
 	-mkdir -p $(TARGET_MODULES_DIR)
 
@@ -205,24 +226,25 @@ $(KERNEL_IPKG):
 
 source: $(DL_DIR)/$(LINUX_SOURCE)
 prepare: $(LINUX_DIR)/.configured
-compile: $(LINUX_DIR)/.modules_done $(TARGETS)
-	ln -sf $(LINUX_BUILD_DIR)/linux-$(LINUX_VERSION) $(LINUX_DIR)
-	$(MAKE) -C $(TOPDIR)/target/linux/package \
-		BOARD="$(BOARD)" \
-		TARGET_DIR="$(LINUX_TARGET_DIR)" \
-		BUILD_DIR="$(LINUX_BUILD_DIR)" \
-		KERNEL_DIR="$(LINUX_SOURCE_DIR)" \
-		LINUX_VERSION="$(LINUX_VERSION)" \
-		KERNEL_RELEASE="$(PKG_RELEASE)"
+compile: $(STAMP_DIR)/.linux-compile
 
 install: compile $(TARGET_MODULES_DIR) $(KERNEL_IPKG)
 	rm -rf $(LINUX_BUILD_DIR)/root*
-	cp -a $(BUILD_DIR)/root $(LINUX_BUILD_DIR)/
 	echo -e 'dest root /\noption offline_root $(LINUX_BUILD_DIR)/root' > $(LINUX_BUILD_DIR)/ipkg.conf
+	$(MAKE) -C $(TOPDIR)/package \
+		TARGET_DIR="$(LINUX_TARGET_DIR)" \
+		IPKG_CONF="$(LINUX_BUILD_DIR)" \
+		BOARD="$(BOARD)" \
+		install
+	$(MAKE) -C $(TOPDIR)/target/linux/package \
+		$(KPKG_MAKEOPTS) \
+		install
 	[ "$(INSTALL_TARGETS)" != "" ] && $(IPKG_KERNEL) install $(INSTALL_TARGETS) || true
 
 mostlyclean:
-	rm -f $(LINUX_BUILD_DIR)/linux-$(LINUX_VERSION)/.{drivers-unpacked,modules_done}
+	rm -f $(STAMP_DIR)/.linux-compile
+	rm -f $(LINUX_BUILD_DIR)/linux-$(LINUX_VERSION)/.modules_done
+	rm -f $(LINUX_BUILD_DIR)/linux-$(LINUX_VERSION)/.drivers-unpacked
 	$(MAKE) -C $(LINUX_BUILD_DIR)/linux-$(LINUX_VERSION) clean
 	rm -f $(LINUX_KERNEL) $(LINUX_IMAGE)
 
@@ -234,5 +256,6 @@ rebuild:
 	$(MAKE) compile
 
 clean:
+	rm -f $(STAMP_DIR)/.linux-compile
 	rm -rf $(LINUX_BUILD_DIR)
 	rm -f $(TARGETS)
